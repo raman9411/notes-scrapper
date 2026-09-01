@@ -107,13 +107,14 @@ export default function App() {
         const blob = await fetchImageBlob(url);
         if (makePdf) {
           downloadedBlobs.push(blob);
+          log(`  ✅ [${i + 1}/${total}] Fetched page ${idx + 1} for PDF`, 'success');
         } else {
           const ext = url.split('.').pop().split('?')[0].toLowerCase();
           const safeExt = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) ? ext : 'webp';
           saveBlobAsFile(blob, `page_${(idx + 1).toString().padStart(3, '0')}.${safeExt}`);
+          log(`  ✅ [${i + 1}/${total}] Downloaded page ${idx + 1}`, 'success');
         }
         success++;
-        log(`  ✅ [${i + 1}/${total}] Downloaded page ${idx + 1}`, 'success');
       } catch (e) {
         failed++;
         log(`  ❌ [${i + 1}/${total}] Failed page ${idx + 1}: ${e.message}`, 'error');
@@ -253,8 +254,8 @@ export default function App() {
                 disabled={status !== 'idle' || selected.size === 0}
                 className="w-full bg-accent hover:bg-accent-lt text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {status !== 'idle' ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-                {status !== 'idle' ? 'Processing...' : `Download ${selected.size} Files`}
+                {status !== 'idle' ? <Loader2 size={18} className="animate-spin" /> : (makePdf ? <FileText size={18} /> : <Download size={18} />)}
+                {status !== 'idle' ? 'Processing...' : (makePdf ? `Download PDF (${selected.size} pages)` : `Download ${selected.size} Files`)}
               </button>
 
               <button 

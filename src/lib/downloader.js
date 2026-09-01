@@ -1,18 +1,29 @@
 export async function fetchImageBlob(url) {
-  // Try direct fetch. If CORS fails, fall back to a proxy.
+  // Try direct fetch. If CORS fails, fall back to proxies.
   try {
     const res = await fetch(url, { mode: 'cors' });
     if (res.ok) return await res.blob();
   } catch (e) {
-    // CORS error or network error, fallback to proxy
-    console.log("Direct fetch failed, trying proxy for", url);
+    console.log("Direct fetch failed, trying proxies for", url);
   }
 
-  // Free CORS proxy
-  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-  const res = await fetch(proxyUrl);
-  if (!res.ok) throw new Error(`Failed to fetch image: ${res.statusText}`);
-  return await res.blob();
+  const proxies = [
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`
+  ];
+
+  for (const proxyGen of proxies) {
+    try {
+      const proxyUrl = proxyGen(url);
+      const res = await fetch(proxyUrl);
+      if (res.ok) return await res.blob();
+    } catch (e) {
+      console.log("Proxy failed:", e.message);
+    }
+  }
+
+  throw new Error(`CORS blocked or network error`);
 }
 
 export function saveBlobAsFile(blob, filename) {
