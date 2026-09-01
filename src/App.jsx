@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, Link as LinkIcon, Download, FileText, Trash2, CheckSquare, Square, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, Link as LinkIcon, Download, FileText, Trash2, CheckSquare, Square, Check, AlertCircle, Loader2, Printer } from 'lucide-react';
 import { extractUrls } from './lib/scraper';
 import { fetchImageBlob, saveBlobAsFile } from './lib/downloader';
-import { buildPdf } from './lib/pdfBuilder';
+import { printImagesToPdf } from './lib/pdfBuilder';
 
 export default function App() {
   const [urls, setUrls] = useState([]);
@@ -88,15 +88,28 @@ export default function App() {
 
   const startDownload = async () => {
     if (selected.size === 0) return;
-    setStatus('downloading');
-    
     const selectedIndices = Array.from(selected).sort((a, b) => a - b);
     const total = selectedIndices.length;
+
+    // ── PDF PATH: open print window, zero CORS issues ──────────────────────
+    if (makePdf) {
+      const selectedUrls = selectedIndices.map(i => urls[i]);
+      log(`▶ Opening print view for ${total} pages…`, 'info');
+      log('  When the dialog opens, choose “Save as PDF” as the destination.', 'dim');
+      try {
+        await printImagesToPdf(selectedUrls, 'Notes');
+        log('✅ Print dialog opened — select “Save as PDF” to save.', 'success');
+      } catch (e) {
+        log(`❌ ${e.message}`, 'error');
+      }
+      return;
+    }
+
+    // ── DOWNLOAD IMAGES PATH ────────────────────────────────────────────────
+    setStatus('downloading');
     setProgress({ current: 0, total });
-    
-    log('▶ Starting download...', 'info');
-    
-    const downloadedBlobs = [];
+    log('▶ Starting download…', 'info');
+
     let success = 0;
     let failed = 0;
 
@@ -105,35 +118,16 @@ export default function App() {
       const url = urls[idx];
       try {
         const blob = await fetchImageBlob(url);
-        if (makePdf) {
-          downloadedBlobs.push(blob);
-          log(`  ✅ [${i + 1}/${total}] Fetched page ${idx + 1} for PDF`, 'success');
-        } else {
-          const ext = url.split('.').pop().split('?')[0].toLowerCase();
-          const safeExt = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) ? ext : 'webp';
-          saveBlobAsFile(blob, `page_${(idx + 1).toString().padStart(3, '0')}.${safeExt}`);
-          log(`  ✅ [${i + 1}/${total}] Downloaded page ${idx + 1}`, 'success');
-        }
+        const ext = url.split('.').pop().split('?')[0].toLowerCase();
+        const safeExt = ['jpg', 'jpeg', 'png', 'webp'].includes(ext) ? ext : 'webp';
+        saveBlobAsFile(blob, `page_${(idx + 1).toString().padStart(3, '0')}.${safeExt}`);
         success++;
+        log(`  ✅ [${i + 1}/${total}] Downloaded page ${idx + 1}`, 'success');
       } catch (e) {
         failed++;
         log(`  ❌ [${i + 1}/${total}] Failed page ${idx + 1}: ${e.message}`, 'error');
       }
       setProgress({ current: i + 1, total });
-    }
-
-    if (makePdf && downloadedBlobs.length > 0) {
-      setStatus('building-pdf');
-      log('📄 Building PDF...', 'info');
-      try {
-        const pdfBlob = await buildPdf(downloadedBlobs, (c, t) => {
-          setProgress({ current: c, total: t });
-        });
-        saveBlobAsFile(pdfBlob, 'Notes.pdf');
-        log('✅ PDF saved: Notes.pdf', 'success');
-      } catch (e) {
-        log(`❌ PDF build failed: ${e.message}`, 'error');
-      }
     }
 
     setStatus('idle');
@@ -238,14 +232,14 @@ export default function App() {
             <div className="bg-card p-5 rounded-xl border border-border-color space-y-4">
               <div 
                 onClick={() => setMakePdf(!makePdf)}
-                className="flex items-center gap-3 p-3 rounded-lg border border-border-color cursor-pointer hover:bg-surface transition-colors"
+                className="flex items-start gap-3 p-3 rounded-lg border border-border-color cursor-pointer hover:bg-surface transition-colors"
               >
-                <div className={`w-5 h-5 rounded flex items-center justify-center border ${makePdf ? 'bg-green-500 border-green-500' : 'border-slate-500'}`}>
+                <div className={`w-5 h-5 rounded flex items-center justify-center border shrink-0 mt-0.5 ${makePdf ? 'bg-green-500 border-green-500' : 'border-slate-500'}`}>
                   {makePdf && <Check size={14} className="text-white" />}
                 </div>
                 <div className="text-sm">
                   <div className="font-semibold text-white">Combine into PDF</div>
-                  <div className="text-slate-400">Merges all selected pages</div>
+                  <div className="text-slate-400 text-xs mt-0.5">Opens browser print dialog → Save&nbsp;as&nbsp;PDF. Works offline, no CORS issues.</div>
                 </div>
               </div>
 
@@ -254,8 +248,14 @@ export default function App() {
                 disabled={status !== 'idle' || selected.size === 0}
                 className="w-full bg-accent hover:bg-accent-lt text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {status !== 'idle' ? <Loader2 size={18} className="animate-spin" /> : (makePdf ? <FileText size={18} /> : <Download size={18} />)}
-                {status !== 'idle' ? 'Processing...' : (makePdf ? `Download PDF (${selected.size} pages)` : `Download ${selected.size} Files`)}
+                {status !== 'idle'
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : makePdf ? <Printer size={18} /> : <Download size={18} />}
+                {status !== 'idle'
+                  ? 'Processing…'
+                  : makePdf
+                    ? `Open as PDF (${selected.size} pages)`
+                    : `Download ${selected.size} Files`}
               </button>
 
               <button 
